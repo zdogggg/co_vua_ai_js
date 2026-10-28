@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cờ Vua AI - Minimax & Alpha-Beta Pruning</title>
+    <link rel="stylesheet" href="./src/styles/base.css" />
+    <link rel="stylesheet" href="./src/styles/board.css" />
+    <link rel="stylesheet" href="./src/styles/panels.css" />
+  </head>
+  <body>
+    <header>
+      <div class="logo-area">
+        <img src="./favicon.svg" alt="Logo" class="logo-icon" />
+        <span class="logo-title">Cờ Vua AI Engine</span>
+      </div>
+      <div class="header-actions">
+        <a href="https://github.com/zdogggg/co_vua_ai_js.git" target="_blank" rel="noopener noreferrer" class="github-link">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </header>
+
+    <main class="app-container">
+      <!-- Left Column: Chess Board & Quick Controls -->
+      <section class="game-section">
+        <div class="player-bar">
+          <div class="player-info">
+            <span class="player-indicator black"></span>
+            <span id="label-player-black">Đối thủ (Đen)</span>
+          </div>
+          <span class="status-badge badge-black" id="status-badge-top">Sẵn sàng</span>
+        </div>
+
+        <div id="board-container"></div>
+
+        <div class="player-bar">
+          <div class="player-info">
+            <span class="player-indicator white"></span>
+            <span id="label-player-white">Bạn (Trắng)</span>
+          </div>
+          <span class="status-badge badge-white" id="status-badge-bottom">Đến lượt bạn</span>
+        </div>
+
+        <div class="board-actions">
+          <button class="btn btn-primary" id="btn-new-game">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Ván Mới
+          </button>
+          <button class="btn" id="btn-undo">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
+            Đi Lại (Undo)
+          </button>
+          <button class="btn" id="btn-flip">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+            Đổi Bên Bàn Cờ
+          </button>
+        </div>
+      </section>
+
+      <!-- Right Column: Sidebar Navigation & Information -->
+      <aside class="sidebar-panel">
+        <nav class="tabs-nav">
+          <button class="tab-btn active" data-tab="game">Cài Đặt & Lịch Sử</button>
+          <button class="tab-btn" data-tab="analysis">Phân Tích AI</button>
+          <button class="tab-btn" data-tab="benchmark">Benchmark Đối Chiếu</button>
+        </nav>
+
+        <!-- Tab 1: Game & Moves -->
+        <div class="tab-content active" id="tab-game">
+          <div class="panel-section">
+            <span class="panel-title">Thiết Lập Ván Đấu</span>
+            
+            <div class="form-group">
+              <label class="form-label" for="select-game-mode">Chế độ chơi</label>
+              <select id="select-game-mode" class="form-select">
+                <option value="player-vs-ai" selected>Người vs AI</option>
+                <option value="ai-vs-ai">AI vs AI (Tự động)</option>
+                <option value="player-vs-player">Người vs Người (2 người)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="select-player-color">Quân của bạn</label>
+              <select id="select-player-color" class="form-select">
+                <option value="w" selected>Trắng (Đi trước)</option>
+                <option value="b">Đen (Đi sau)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="select-algorithm">Thuật toán AI</label>
+              <select id="select-algorithm" class="form-select">
+                <option value="alphabeta" selected>Alpha-Beta Pruning (Tối ưu cắt tỉa)</option>
+                <option value="minimax">Minimax (Duyệt toàn bộ cây)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <div style="display:flex; justify-content:space-between;">
+                <label class="form-label" for="range-depth">Độ sâu tìm kiếm</label>
+                <span class="range-value" id="display-depth">3</span>
+              </div>
+              <div class="range-container">
+                <input type="range" id="range-depth" class="range-input" min="1" max="4" value="3" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="check-move-ordering" checked />
+                <span>Bật sắp xếp nước đi (Move Ordering: MVV-LVA)</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <span class="panel-title">Lịch Sử Nước Đi</span>
+            <div class="history-container" id="history-container">
+              <div class="history-empty">Chưa có nước đi nào</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: AI Realtime Analytics -->
+        <div class="tab-content" id="tab-analysis">
+          <div id="thinking-banner" class="thinking-banner hidden">
+            <div class="spinner"></div>
+            <span>AI đang tìm kiếm nước đi tối ưu qua Web Worker...</span>
+          </div>
+
+          <div class="panel-section">
+            <span class="panel-title">Thông Số Nước Đi Gần Nhất</span>
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <span class="metric-label">Thuật toán</span>
+                <span class="metric-value" id="metric-algo">Alpha-Beta</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Độ sâu</span>
+                <span class="metric-value" id="metric-depth">3</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Nước đi AI</span>
+                <span class="metric-value highlight" id="metric-move">-</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Điểm đánh giá</span>
+                <span class="metric-value" id="metric-score">0.00</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Node đã duyệt</span>
+                <span class="metric-value" id="metric-nodes">0</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Lần cắt tỉa</span>
+                <span class="metric-value" id="metric-cutoffs">0</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Nhánh con đã bỏ qua</span>
+                <span class="metric-value" id="metric-pruned">0</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Thời gian tính</span>
+                <span class="metric-value" id="metric-time">0 ms</span>
+              </div>
+              <div class="metric-card full-width">
+                <span class="metric-label">Tốc độ tìm kiếm</span>
+                <span class="metric-value" id="metric-nps">0 nps</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-section" style="font-size:0.85rem; color:var(--text-muted); line-height:1.5;">
+            <p>💡 <b>Ghi chú thuật toán:</b></p>
+            <p>• <b>Minimax:</b> Duyệt toàn diện tất cả các nhánh ở độ sâu tìm kiếm.</p>
+            <p>• <b>Alpha-Beta Pruning:</b> Cắt tỉa các nhánh không thể làm thay đổi quyết định, bảo đảm nước đi tìm ra tương đương Minimax nhưng giảm mạnh số node cần duyệt.</p>
+          </div>
+        </div>
+
+        <!-- Tab 3: Benchmark Suite -->
+        <div class="tab-content" id="tab-benchmark">
+          <div class="panel-section">
+            <span class="panel-title">Phòng Thí Nghiệm Đối Chiếu Thuật Toán</span>
+            <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">
+              Chạy thực nghiệm độc lập cùng một vị trí cờ (FEN) và cùng độ sâu giữa <b>Minimax thuần</b> và <b>Alpha-Beta Pruning</b> để lấy số liệu thực tế cho báo cáo/đồ án.
+            </p>
+            <div class="benchmark-actions">
+              <button class="btn btn-primary" id="btn-run-benchmark">Chạy Benchmark Đối Chiếu</button>
+            </div>
+          </div>
+
+          <div class="benchmark-results" id="benchmark-results">
+            <div class="history-empty">Nhấn nút bên trên để bắt đầu chạy kiểm thử so sánh.</div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
