@@ -1,5 +1,5 @@
 import { BENCHMARK_POSITIONS, runBenchmarkComparison } from '../analysis/benchmark.js';
-import { buildExplanationTree } from '../analysis/tree-visualizer.js';
+import { buildExplanationTree, generateTreeSvg } from '../analysis/tree-visualizer.js';
 
 export class UIController {
   constructor({ settings, gameController }) {
@@ -124,39 +124,58 @@ export class UIController {
   renderSearchTree() {
     if (!this.treeContainer) return;
 
-    this.treeContainer.innerHTML = `<div class="history-empty">Đang phân tích và dựng cây cắt tỉa Alpha-Beta...</div>`;
+    this.treeContainer.innerHTML = `<div class="history-empty">Đang phân tích và dựng sơ đồ cây cắt tỉa Alpha-Beta...</div>`;
 
     setTimeout(() => {
-      const tree = buildExplanationTree(this.gameController.chess, 2, 4);
+      const data = buildExplanationTree(this.gameController.chess);
+      const svgHtml = generateTreeSvg(data.root);
 
-      function renderNode(node) {
-        const isMax = node.type === 'MAX';
-        const prunedClass = node.pruned ? 'is-pruned' : (isMax ? 'is-max' : 'is-min');
-        const badgeClass = node.pruned ? 'pruned' : (isMax ? 'max' : 'min');
-        const scoreFormatted = node.score !== null ? ` [${(node.score / 100).toFixed(2)}]` : '';
-        const reason = node.cutoffReason ? ` <span class="node-reason">(${node.cutoffReason})</span>` : '';
+      let tableHtml = `
+        <div class="trace-table-container">
+          <div style="font-weight:700; font-size:0.85rem; margin-bottom:0.4rem; color:var(--text-muted);">
+            BẢNG TRUY VẾT QUYẾT ĐỊNH & CẮT TỈA TỪNG BƯỚC
+          </div>
+          <table class="trace-table">
+            <thead>
+              <tr>
+                <th>Nước đi</th>
+                <th>Tầng</th>
+                <th>α</th>
+                <th>β</th>
+                <th>Điểm</th>
+                <th>Trạng thái</th>
+                <th>Ghi chú</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
 
-        let html = `
-          <div class="tree-node-wrapper">
-            <div class="tree-node ${prunedClass}">
-              <span class="node-badge ${badgeClass}">${node.pruned ? '✂️ CẮT TỈA' : node.type}</span>
-              <span><b>${node.name}</b></span>
-              ${node.score !== null ? `<span class="node-score">${scoreFormatted}</span>` : ''}
-              ${reason}
-            </div>
+      for (const row of data.tableRows) {
+        const isPruned = row.status.includes('CẮT TỈA');
+        const isBest = row.status.includes('Nước tốt nhất');
+        const rowClass = isPruned ? 'row-pruned' : (isBest ? 'row-best' : '');
+
+        tableHtml += `
+          <tr class="${rowClass}">
+            <td><b>${row.move}</b></td>
+            <td>${row.role}</td>
+            <td>${row.alpha}</td>
+            <td>${row.beta}</td>
+            <td>${row.score}</td>
+            <td>${row.status}</td>
+            <td style="font-size:0.75rem; opacity:0.85;">${row.note}</td>
+          </tr>
         `;
-
-        if (node.children && node.children.length > 0) {
-          for (const child of node.children) {
-            html += renderNode(child);
-          }
-        }
-
-        html += `</div>`;
-        return html;
       }
 
-      this.treeContainer.innerHTML = renderNode(tree);
+      tableHtml += `</tbody></table></div>`;
+
+      this.treeContainer.innerHTML = `
+        <div class="tree-svg-wrapper">
+          ${svgHtml}
+        </div>
+        ${tableHtml}
+      `;
     }, 50);
   }
 
