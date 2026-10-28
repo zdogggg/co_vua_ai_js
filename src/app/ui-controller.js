@@ -1,4 +1,5 @@
 import { BENCHMARK_POSITIONS, runBenchmarkComparison } from '../analysis/benchmark.js';
+import { buildExplanationTree } from '../analysis/tree-visualizer.js';
 
 export class UIController {
   constructor({ settings, gameController }) {
@@ -46,6 +47,10 @@ export class UIController {
     // Benchmark elements
     this.btnRunBenchmark = document.getElementById('btn-run-benchmark');
     this.benchmarkResults = document.getElementById('benchmark-results');
+
+    // Tree Visualizer
+    this.btnRenderTree = document.getElementById('btn-render-tree');
+    this.treeContainer = document.getElementById('tree-visual-container');
   }
 
   bindEvents() {
@@ -107,6 +112,52 @@ export class UIController {
     this.btnRunBenchmark.addEventListener('click', () => {
       this.executeBenchmarkSuite();
     });
+
+    // Search Tree Visualizer
+    if (this.btnRenderTree) {
+      this.btnRenderTree.addEventListener('click', () => {
+        this.renderSearchTree();
+      });
+    }
+  }
+
+  renderSearchTree() {
+    if (!this.treeContainer) return;
+
+    this.treeContainer.innerHTML = `<div class="history-empty">Đang phân tích và dựng cây cắt tỉa Alpha-Beta...</div>`;
+
+    setTimeout(() => {
+      const tree = buildExplanationTree(this.gameController.chess, 2, 4);
+
+      function renderNode(node) {
+        const isMax = node.type === 'MAX';
+        const prunedClass = node.pruned ? 'is-pruned' : (isMax ? 'is-max' : 'is-min');
+        const badgeClass = node.pruned ? 'pruned' : (isMax ? 'max' : 'min');
+        const scoreFormatted = node.score !== null ? ` [${(node.score / 100).toFixed(2)}]` : '';
+        const reason = node.cutoffReason ? ` <span class="node-reason">(${node.cutoffReason})</span>` : '';
+
+        let html = `
+          <div class="tree-node-wrapper">
+            <div class="tree-node ${prunedClass}">
+              <span class="node-badge ${badgeClass}">${node.pruned ? '✂️ CẮT TỈA' : node.type}</span>
+              <span><b>${node.name}</b></span>
+              ${node.score !== null ? `<span class="node-score">${scoreFormatted}</span>` : ''}
+              ${reason}
+            </div>
+        `;
+
+        if (node.children && node.children.length > 0) {
+          for (const child of node.children) {
+            html += renderNode(child);
+          }
+        }
+
+        html += `</div>`;
+        return html;
+      }
+
+      this.treeContainer.innerHTML = renderNode(tree);
+    }, 50);
   }
 
   updateStatus(status, isAiThinking) {

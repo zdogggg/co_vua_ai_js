@@ -67,7 +67,8 @@
         <nav class="tabs-nav">
           <button class="tab-btn active" data-tab="game">Cài Đặt & Lịch Sử</button>
           <button class="tab-btn" data-tab="analysis">Phân Tích AI</button>
-          <button class="tab-btn" data-tab="benchmark">Benchmark Đối Chiếu</button>
+          <button class="tab-btn" data-tab="tree">Cây Cắt Tỉa</button>
+          <button class="tab-btn" data-tab="benchmark">Benchmark</button>
         </nav>
 
         <!-- Tab 1: Game & Moves -->
@@ -182,7 +183,27 @@
           </div>
         </div>
 
-        <!-- Tab 3: Benchmark Suite -->
+        <!-- Tab 3: Search Tree & Pruning Visualizer -->
+        <div class="tab-content" id="tab-tree">
+          <div class="panel-section">
+            <span class="panel-title">Minh Họa Cây Cắt Tỉa (Trình Chiếu Đồ Án)</span>
+            <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">
+              Trực quan hóa quá trình đệ quy MAX/MIN từ thế cờ hiện tại và giải thích chính xác tại sao nhánh bị cắt tỉa khi thỏa mãn điều kiện <b>&alpha; &ge; &beta;</b>.
+            </p>
+            <div class="benchmark-actions">
+              <button class="btn btn-primary" id="btn-render-tree">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                Vẽ Cây Cắt Tỉa Thế Cờ Hiện Tại
+              </button>
+            </div>
+          </div>
+
+          <div class="tree-container" id="tree-visual-container">
+            <div class="history-empty">Bấm nút bên trên để dựng cây tìm kiếm và xem các nhánh bị Alpha-Beta cắt tỉa.</div>
+          </div>
+        </div>
+
+        <!-- Tab 4: Benchmark Suite -->
         <div class="tab-content" id="tab-benchmark">
           <div class="panel-section">
             <span class="panel-title">Phòng Thí Nghiệm Đối Chiếu Thuật Toán</span>
