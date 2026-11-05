@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js';
 import { minimaxSearch } from './minimax.js';
 import { alphaBetaSearch } from './alpha-beta.js';
+import { runBenchmarkComparison } from '../analysis/benchmark.js';
 
 let worker = null;
 let currentRequestId = 0;
@@ -24,6 +25,14 @@ function getWorker() {
       };
       worker.onerror = (err) => {
         console.error('Worker error:', err);
+        // Reject every waiting request so the game does not stay "thinking" forever,
+        // then drop the worker so the next call recreates it (or falls back).
+        for (const pending of pendingRequests.values()) {
+          pending.reject(new Error(err.message || 'Worker crashed'));
+        }
+        pendingRequests.clear();
+        worker.terminate();
+        worker = null;
       };
     } catch (err) {
       console.warn('Web Worker initialization failed, falling back to main thread.', err);
@@ -52,17 +61,7 @@ export async function findBestMove(fen, options = {}) {
   const activeWorker = getWorker();
 
   if (activeWorker) {
-    return new Promise((resolve, reject) => {
-      const id = ++currentRequestId;
-      pendingRequests.set(id, { resolve, reject });
-      activeWorker.postMessage({
-        id,
-        fen,
-        algorithm,
-        depth,
-        useMoveOrdering
-      });
-    });
+    return postToWorker(activeWorker, { type: 'search', fen, algorithm, depth, useMoveOrdering });
   }
 
   // Fallback to synchronous execution on main thread
@@ -72,4 +71,25 @@ export async function findBestMove(fen, options = {}) {
   } else {
     return alphaBetaSearch(chess, depth, useMoveOrdering);
   }
+}
+
+/**
+ * Runs the Minimax vs Alpha-Beta benchmark for one position in the Web Worker,
+ * so the page stays responsive while Minimax explores the full tree.
+ * @returns {Promise<object>} same shape as runBenchmarkComparison()
+ */
+export async function runBenchmarkAsync(fen, depth, useMoveOrdering = true) {
+  const activeWorker = getWorker();
+  if (activeWorker) {
+    return postToWorker(activeWorker, { type: 'benchmark', fen, depth, useMoveOrdering });
+  }
+  return runBenchmarkComparison(fen, depth, useMoveOrdering);
+}
+
+function postToWorker(activeWorker, message) {
+  return new Promise((resolve, reject) => {
+    const id = ++currentRequestId;
+    pendingRequests.set(id, { resolve, reject });
+    activeWorker.postMessage({ id, ...message });
+  });
 }

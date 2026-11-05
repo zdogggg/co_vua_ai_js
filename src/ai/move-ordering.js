@@ -20,8 +20,13 @@ function scoreMove(move) {
     score += 10000 + (victimVal * 10 - attackerVal);
   }
 
-  // 3. Castling (kingside or queenside) - good for king safety
-  if (move.isCastling || move.san === 'O-O' || move.san === 'O-O-O') {
+  // 3. Checks - often forcing, worth trying before quiet moves
+  if (move.san.includes('+') || move.san.includes('#')) {
+    score += 500;
+  }
+
+  // 4. Castling (kingside 'k' or queenside 'q' flag) - good for king safety
+  if (move.flags.includes('k') || move.flags.includes('q')) {
     score += 50;
   }
 

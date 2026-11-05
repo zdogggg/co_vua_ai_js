@@ -18,9 +18,9 @@ document.addEventListener('DOMContentLoaded', () => {
     settings,
     boardView,
     historyView,
-    onStatusChange: (status, isAiThinking) => {
+    onStateChange: (state) => {
       if (uiController) {
-        uiController.updateStatus(status, isAiThinking);
+        uiController.updateState(state);
       }
     },
     onMetricsUpdate: (metrics) => {
@@ -31,4 +31,5 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   uiController = new UIController({ settings, gameController });
+  gameController.render();
 });

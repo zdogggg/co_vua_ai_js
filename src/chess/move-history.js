@@ -34,12 +34,18 @@ export class MoveHistoryView {
         <tbody>
     `;
 
+    const last = this.moves[this.moves.length - 1];
+    const lastIsBlack = last.black !== '';
+
     for (const m of this.moves) {
+      const isLastRow = m === last;
+      const whiteClass = isLastRow && !lastIsBlack ? ' current' : '';
+      const blackClass = isLastRow && lastIsBlack ? ' current' : '';
       html += `
         <tr>
           <td class="history-num">${m.num}.</td>
-          <td class="history-white">${m.white}</td>
-          <td class="history-black">${m.black}</td>
+          <td class="history-white${whiteClass}">${m.white}</td>
+          <td class="history-black${blackClass}">${m.black}</td>
         </tr>
       `;
     }

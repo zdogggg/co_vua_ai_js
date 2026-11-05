@@ -1,4 +1,4 @@
-import { evaluatePosition, CHECKMATE_SCORE } from './evaluation.js';
+import { evaluatePosition, evaluateBoard, CHECKMATE_SCORE } from './evaluation.js';
 import { orderMoves } from './move-ordering.js';
 
 /**
@@ -25,25 +25,28 @@ export function alphaBetaSearch(chess, depth, useMoveOrdering = true) {
   function search(currentDepth, alpha, beta, maximizing, plyFromRoot) {
     nodesVisited++;
 
-    // Check terminal state
+    // Terminal state. isGameOver() uses chess.js's fast internal move generator;
+    // moves({ verbose: true }) is much slower (it builds SAN for every move), so we
+    // only call it below for nodes we are actually going to expand.
     if (chess.isGameOver()) {
       if (chess.isCheckmate()) {
-        return chess.turn() === 'w' 
-          ? -(CHECKMATE_SCORE - plyFromRoot) 
+        // If current turn is White and checkmated, Black won (-score)
+        // If current turn is Black and checkmated, White won (+score)
+        // Subtracting plyFromRoot makes the AI prefer the fastest mate
+        return chess.turn() === 'w'
+          ? -(CHECKMATE_SCORE - plyFromRoot)
           : (CHECKMATE_SCORE - plyFromRoot);
       }
-      return 0; // Draw
+      return 0; // Draw: stalemate, 50-move rule, insufficient material, threefold repetition
     }
 
-    // Leaf node
+    // Leaf node: static evaluation (terminal cases were already handled above,
+    // so evaluateBoard skips the second isGameOver() that evaluatePosition would do)
     if (currentDepth === 0) {
-      return evaluatePosition(chess);
+      return evaluateBoard(chess);
     }
 
     let legalMoves = chess.moves({ verbose: true });
-    if (legalMoves.length === 0) {
-      return evaluatePosition(chess);
-    }
 
     if (useMoveOrdering) {
       legalMoves = orderMoves(legalMoves);

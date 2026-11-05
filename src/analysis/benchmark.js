@@ -36,7 +36,8 @@ export function runBenchmarkComparison(fen, depth, useMoveOrdering = true) {
   const chessMinimax = new Chess(fen);
   const chessAlphaBeta = new Chess(fen);
 
-  const mmResult = minimaxSearch(chessMinimax, depth);
+  // Same ordering for both so ties are broken identically (ordering never changes Minimax's node count)
+  const mmResult = minimaxSearch(chessMinimax, depth, useMoveOrdering);
   const abResult = alphaBetaSearch(chessAlphaBeta, depth, useMoveOrdering);
 
   const nodeSavings = mmResult.nodesVisited > 0

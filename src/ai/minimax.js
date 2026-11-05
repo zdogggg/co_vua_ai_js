@@ -1,4 +1,5 @@
-import { evaluatePosition, CHECKMATE_SCORE } from './evaluation.js';
+import { evaluatePosition, evaluateBoard, CHECKMATE_SCORE } from './evaluation.js';
+import { orderMoves } from './move-ordering.js';
 
 /**
  * Minimax Search Algorithm
@@ -9,7 +10,7 @@ import { evaluatePosition, CHECKMATE_SCORE } from './evaluation.js';
  * 
  * @param {import('chess.js').Chess} chess
  * @param {number} depth
- * @param {boolean} [useMoveOrdering=false]
+ * @param {boolean} [useMoveOrdering=false] - only affects tie-breaking, not node count
  * @returns {{ bestMove: object|null, bestScore: number, nodesVisited: number, timeMs: number }}
  */
 export function minimaxSearch(chess, depth, useMoveOrdering = false) {
@@ -23,26 +24,31 @@ export function minimaxSearch(chess, depth, useMoveOrdering = false) {
   function search(currentDepth, maximizing, plyFromRoot) {
     nodesVisited++;
 
-    // Check terminal state
+    // Terminal state. isGameOver() uses chess.js's fast internal move generator;
+    // moves({ verbose: true }) is much slower (it builds SAN for every move), so we
+    // only call it below for nodes we are actually going to expand.
     if (chess.isGameOver()) {
       if (chess.isCheckmate()) {
         // If current turn is White and checkmated, Black won (-score)
         // If current turn is Black and checkmated, White won (+score)
-        return chess.turn() === 'w' 
-          ? -(CHECKMATE_SCORE - plyFromRoot) 
+        // Subtracting plyFromRoot makes the AI prefer the fastest mate
+        return chess.turn() === 'w'
+          ? -(CHECKMATE_SCORE - plyFromRoot)
           : (CHECKMATE_SCORE - plyFromRoot);
       }
-      return 0; // Draw
+      return 0; // Draw: stalemate, 50-move rule, insufficient material, threefold repetition
     }
 
-    // Leaf node
+    // Leaf node: static evaluation (terminal cases were already handled above,
+    // so evaluateBoard skips the second isGameOver() that evaluatePosition would do)
     if (currentDepth === 0) {
-      return evaluatePosition(chess);
+      return evaluateBoard(chess);
     }
 
-    const legalMoves = chess.moves({ verbose: true });
-    if (legalMoves.length === 0) {
-      return evaluatePosition(chess);
+    let legalMoves = chess.moves({ verbose: true });
+
+    if (useMoveOrdering) {
+      legalMoves = orderMoves(legalMoves);
     }
 
     if (maximizing) {
@@ -77,7 +83,7 @@ export function minimaxSearch(chess, depth, useMoveOrdering = false) {
   }
 
   // Root level search
-  const moves = chess.moves({ verbose: true });
+  let moves = chess.moves({ verbose: true });
   if (moves.length === 0) {
     return {
       bestMove: null,
@@ -85,6 +91,12 @@ export function minimaxSearch(chess, depth, useMoveOrdering = false) {
       nodesVisited: 0,
       timeMs: 0
     };
+  }
+
+  // Move ordering does not change Minimax's node count (no pruning), but using the
+  // same order as Alpha-Beta makes both pick the same move when scores are tied.
+  if (useMoveOrdering) {
+    moves = orderMoves(moves);
   }
 
   let bestMove = null;

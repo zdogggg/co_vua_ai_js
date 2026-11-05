@@ -1,19 +1,30 @@
 import { Chess } from 'chess.js';
 import { GameMode } from './settings.js';
 import { findBestMove } from '../ai/ai-service.js';
+import { evaluatePosition } from '../ai/evaluation.js';
 import { getGameStatus } from '../chess/game-status.js';
 
+const START_COUNTS = { p: 8, n: 2, b: 2, r: 2, q: 1 };
+const MATERIAL = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+
 export class GameController {
-  constructor({ settings, boardView, historyView, onStatusChange, onMetricsUpdate }) {
+  constructor({ settings, boardView, historyView, onStateChange, onMetricsUpdate }) {
     this.settings = settings;
     this.boardView = boardView;
     this.historyView = historyView;
-    this.onStatusChange = onStatusChange || (() => {});
+    this.onStateChange = onStateChange || (() => {});
     this.onMetricsUpdate = onMetricsUpdate || (() => {});
 
     this.chess = new Chess();
     this.isAiThinking = false;
-    this.aiLoopTimer = null;
+    this.isPaused = false;
+    this.aiTimer = null;
+    this.selectedSquare = null;
+    this.currentLegalMoves = [];
+
+    // Incremented on every New Game / Undo. An AI search started for an older
+    // position compares its id and throws its result away instead of playing it.
+    this.positionId = 0;
 
     // Connect board click callback
     this.boardView.onSquareClick = this.handleSquareClick.bind(this);
@@ -35,54 +46,95 @@ export class GameController {
   }
 
   startNewGame() {
-    this.stopAiLoop();
+    this.cancelPendingAi();
+    this.isPaused = false;
     this.chess.reset();
-    this.boardView.setHighlights({ selected: null, legalMoves: [], lastMove: null, checkSquare: null });
-    this.historyView.setMoves([]);
+    this.clearSelection();
     this.render();
 
     this.checkNextTurn();
   }
 
-  stopAiLoop() {
-    if (this.aiLoopTimer) {
-      clearTimeout(this.aiLoopTimer);
-      this.aiLoopTimer = null;
+  /** Stops any scheduled or running AI search and invalidates its result. */
+  cancelPendingAi() {
+    if (this.aiTimer) {
+      clearTimeout(this.aiTimer);
+      this.aiTimer = null;
     }
+    this.positionId++;
+    this.isAiThinking = false;
+    this.boardView.hidePromotionModal();
+  }
+
+  clearSelection() {
+    this.selectedSquare = null;
+    this.currentLegalMoves = [];
+  }
+
+  findKingSquare(color) {
+    const board = this.chess.board();
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const p = board[r][c];
+        if (p && p.type === 'k' && p.color === color) {
+          return `${String.fromCharCode(97 + c)}${8 - r}`;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Pieces each side has lost, derived from what is left on the board
+   * (works for promotions too: a promoted pawn counts as the new piece).
+   */
+  getCapturedPieces() {
+    const counts = { w: { p: 0, n: 0, b: 0, r: 0, q: 0 }, b: { p: 0, n: 0, b: 0, r: 0, q: 0 } };
+    for (const row of this.chess.board()) {
+      for (const p of row) {
+        if (p && p.type !== 'k') counts[p.color][p.type]++;
+      }
+    }
+
+    const lost = { w: [], b: [] };
+    let material = { w: 0, b: 0 };
+    for (const color of ['w', 'b']) {
+      for (const type of ['q', 'r', 'b', 'n', 'p']) {
+        const missing = Math.max(0, START_COUNTS[type] - counts[color][type]);
+        for (let i = 0; i < missing; i++) lost[color].push(type);
+        material[color] += counts[color][type] * MATERIAL[type];
+      }
+    }
+    // lost.w = white pieces captured by Black, shown next to Black's name (and vice versa)
+    return { lost, materialDiff: material.w - material.b };
   }
 
   render() {
     const boardMatrix = this.chess.board();
-    
-    // Find King in check square if in check
-    let checkSquare = null;
-    if (this.chess.inCheck()) {
-      const turn = this.chess.turn();
-      for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-          const p = boardMatrix[r][c];
-          if (p && p.type === 'k' && p.color === turn) {
-            const file = String.fromCharCode(97 + c);
-            const rank = 8 - r;
-            checkSquare = `${file}${rank}`;
-            break;
-          }
-        }
-        if (checkSquare) break;
-      }
-    }
+    const checkSquare = this.chess.inCheck() ? this.findKingSquare(this.chess.turn()) : null;
 
-    const lastMove = this.getLastMoveVerbose();
     this.boardView.setHighlights({
       selected: this.selectedSquare,
-      legalMoves: this.currentLegalMoves || [],
-      lastMove,
+      legalMoves: this.currentLegalMoves,
+      lastMove: this.getLastMoveVerbose(),
       checkSquare
     });
 
     this.boardView.render(boardMatrix);
     this.historyView.setMoves(this.chess.history());
-    this.onStatusChange(getGameStatus(this.chess), this.isAiThinking);
+
+    this.onStateChange({
+      status: getGameStatus(this.chess),
+      isAiThinking: this.isAiThinking,
+      isPaused: this.isPaused,
+      turn: this.chess.turn(),
+      mode: this.settings.get('gameMode'),
+      playerColor: this.settings.get('playerColor'),
+      flipped: this.settings.get('isBoardFlipped'),
+      captured: this.getCapturedPieces(),
+      evalScore: evaluatePosition(this.chess),
+      canUndo: this.chess.history().length > 0
+    });
   }
 
   getLastMoveVerbose() {
@@ -113,41 +165,38 @@ export class GameController {
     const piece = this.chess.get(square);
     const currentTurn = this.chess.turn();
 
-    // 1. If clicking a friendly piece, select it
+    // 1. If clicking a friendly piece, select it (clicking it again deselects)
     if (piece && piece.color === currentTurn) {
-      this.selectedSquare = square;
-      this.currentLegalMoves = this.chess.moves({ square, verbose: true });
+      if (this.selectedSquare === square) {
+        this.clearSelection();
+      } else {
+        this.selectedSquare = square;
+        this.currentLegalMoves = this.chess.moves({ square, verbose: true });
+      }
       this.render();
       return;
     }
 
     // 2. If a square is already selected, try to move to clicked square
     if (this.selectedSquare) {
-      const chosenMove = (this.currentLegalMoves || []).find(m => m.to === square);
+      const from = this.selectedSquare;
+      const chosenMove = this.currentLegalMoves.find(m => m.to === square);
       if (chosenMove) {
-        // Check for promotion
+        // Check for promotion. Capture from/to now: the selection may change before the user picks.
         if (chosenMove.promotion) {
           this.boardView.showPromotionModal(currentTurn, (promotionPiece) => {
-            this.executeMove({
-              from: this.selectedSquare,
-              to: square,
-              promotion: promotionPiece
-            });
+            this.executeMove({ from, to: square, promotion: promotionPiece });
           });
           return;
         }
 
-        this.executeMove({
-          from: this.selectedSquare,
-          to: square
-        });
+        this.executeMove({ from, to: square });
         return;
       }
     }
 
     // 3. Clicked empty square or illegal destination: deselect
-    this.selectedSquare = null;
-    this.currentLegalMoves = [];
+    this.clearSelection();
     this.render();
   }
 
@@ -155,8 +204,7 @@ export class GameController {
     try {
       const move = this.chess.move(moveObj);
       if (move) {
-        this.selectedSquare = null;
-        this.currentLegalMoves = [];
+        this.clearSelection();
         this.render();
 
         this.checkNextTurn();
@@ -167,23 +215,25 @@ export class GameController {
   }
 
   checkNextTurn() {
-    if (this.chess.isGameOver()) {
+    if (this.chess.isGameOver() || this.isPaused) {
       this.render();
       return;
     }
 
     const mode = this.settings.get('gameMode');
     if (mode === GameMode.AI_VS_AI) {
-      this.aiLoopTimer = setTimeout(() => this.makeAIMove(), this.settings.get('aiDelayMs'));
+      this.aiTimer = setTimeout(() => this.makeAIMove(), this.settings.get('aiDelayMs'));
     } else if (mode === GameMode.PLAYER_VS_AI && !this.isHumanTurn()) {
-      // Delay slightly for natural responsiveness
-      setTimeout(() => this.makeAIMove(), 50);
+      // Delay slightly so the player's move is painted before the AI starts
+      this.aiTimer = setTimeout(() => this.makeAIMove(), 50);
     }
   }
 
   async makeAIMove() {
+    this.aiTimer = null;
     if (this.chess.isGameOver()) return;
 
+    const requestId = this.positionId;
     this.isAiThinking = true;
     this.render();
 
@@ -198,6 +248,9 @@ export class GameController {
         useMoveOrdering
       });
 
+      // New game / undo happened while searching: this result is for an old position
+      if (requestId !== this.positionId) return;
+
       this.isAiThinking = false;
 
       if (result && result.bestMove) {
@@ -211,13 +264,14 @@ export class GameController {
           cutoffs: result.cutoffs ?? 0,
           branchesPruned: result.branchesPruned ?? 0,
           timeMs: Number(result.timeMs.toFixed(1)),
-          nps: Math.round(result.nodesVisited / ((result.timeMs || 1) / 1000))
+          nps: Math.round(result.nodesVisited / (Math.max(result.timeMs, 1) / 1000))
         });
       }
 
       this.render();
       this.checkNextTurn();
     } catch (err) {
+      if (requestId !== this.positionId) return;
       console.error('Error during AI move execution:', err);
       this.isAiThinking = false;
       this.render();
@@ -225,23 +279,39 @@ export class GameController {
   }
 
   undo() {
-    if (this.isAiThinking) return;
-    this.stopAiLoop();
+    if (this.chess.history().length === 0) return;
+    this.cancelPendingAi();
 
     const mode = this.settings.get('gameMode');
     if (mode === GameMode.PLAYER_VS_AI) {
-      // Undo both AI move and Player move
+      // Undo both AI move and Player move, so it is the player's turn again
       this.chess.undo();
-      if (!this.isHumanTurn()) {
+      if (!this.isHumanTurn() && this.chess.history().length > 0) {
         this.chess.undo();
       }
     } else {
       this.chess.undo();
+      // In AI vs AI, stepping back pauses the game so it can be inspected
+      if (mode === GameMode.AI_VS_AI) this.isPaused = true;
     }
 
-    this.selectedSquare = null;
-    this.currentLegalMoves = [];
+    this.clearSelection();
     this.render();
+
+    // e.g. player is Black and undid back to the start: the AI (White) must move again
+    this.checkNextTurn();
+  }
+
+  togglePause() {
+    if (this.isPaused) {
+      this.isPaused = false;
+      this.render();
+      this.checkNextTurn();
+    } else {
+      this.cancelPendingAi();
+      this.isPaused = true;
+      this.render();
+    }
   }
 
   flipBoard() {

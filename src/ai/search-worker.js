@@ -1,18 +1,23 @@
 import { Chess } from 'chess.js';
 import { minimaxSearch } from './minimax.js';
 import { alphaBetaSearch } from './alpha-beta.js';
+import { runBenchmarkComparison } from '../analysis/benchmark.js';
 
 self.onmessage = function (e) {
-  const { id, fen, algorithm, depth, useMoveOrdering } = e.data;
-  
+  const { id, type = 'search', fen, algorithm, depth, useMoveOrdering } = e.data;
+
   try {
-    const chess = new Chess(fen);
     let result;
 
-    if (algorithm === 'minimax') {
-      result = minimaxSearch(chess, depth, useMoveOrdering);
+    if (type === 'benchmark') {
+      result = runBenchmarkComparison(fen, depth, useMoveOrdering);
     } else {
-      result = alphaBetaSearch(chess, depth, useMoveOrdering);
+      const chess = new Chess(fen);
+      if (algorithm === 'minimax') {
+        result = minimaxSearch(chess, depth, useMoveOrdering);
+      } else {
+        result = alphaBetaSearch(chess, depth, useMoveOrdering);
+      }
     }
 
     self.postMessage({ id, success: true, result });
